@@ -21,45 +21,19 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
-        // The WS server URL is resolved at runtime (env var or encrypted per-user
-        // file); MySQL credentials no longer live on client machines. If no server
-        // is configured, warn but keep running so the user can configure it.
-        if (!ClientConfig.IsConfigured())
-        {
-            MessageBox.Show(
-                "No se ha configurado el servidor de MES Control Center.\n\n" +
-                $"Define la variable de entorno '{ClientConfig.EnvVarName}' " +
-                "(p.ej. ws://host:8092/ws) o ejecuta el asistente de instalación.\n\n" +
-                "La aplicación abrirá, pero el monitoreo remoto estará inactivo hasta configurarlo.",
-                "MES Control Center — Configuración requerida",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
-
         var services = new ServiceCollection();
 
         // Core services
-        services.AddSingleton<ICredentialService, CredentialService>();
         services.AddSingleton<IScriptMonitor, ProcessMonitorService>();
-        services.AddSingleton<CommandExecutorService>();
         services.AddSingleton<GitDeployService>();
         services.AddSingleton<ResourceMonitorService>();
+        services.AddSingleton<LocalBackupService>();
         services.AddSingleton<IScriptConfigRepository, JsonScriptConfigRepository>();
-
-        // WebSocket agent client (replaces the old direct-MySQL agent loop)
-        services.AddSingleton(sp => new WsAgentClient(
-            sp.GetRequiredService<ICredentialService>(),
-            sp.GetRequiredService<IScriptMonitor>(),
-            sp.GetRequiredService<CommandExecutorService>(),
-            sp.GetRequiredService<IScriptConfigRepository>(),
-            ClientConfig.ResolveServerUrl));
 
         // ViewModels
         services.AddTransient<MainViewModel>();
-        services.AddTransient<DashboardViewModel>();
+        services.AddTransient<BackupViewModel>();
         services.AddTransient<ScriptEditorViewModel>();
-        services.AddTransient<LoginViewModel>();
-        services.AddTransient<InstallerViewModel>();
 
         Services = services.BuildServiceProvider();
 

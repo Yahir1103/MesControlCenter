@@ -12,7 +12,8 @@ namespace MesControlCenter.UI.ViewModels;
 public partial class BackupViewModel : ObservableObject
 {
     private static readonly Regex TimeRegex = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
-    private readonly WsDashboardClient _ws = new();
+    private readonly LocalBackupService _backupService;
+    private bool _subscribed;
 
     public ObservableCollection<BackupRunViewModel> Runs { get; } = new();
 
@@ -23,9 +24,15 @@ public partial class BackupViewModel : ObservableObject
     [ObservableProperty] private string _retentionDaysText = "7";
     [ObservableProperty] private string _backupDir = string.Empty;
     [ObservableProperty] private string _timezone = string.Empty;
-    [ObservableProperty] private string _statusMessage = "Connecting to server...";
-    [ObservableProperty] private string _serverStateText = "Unknown";
-    [ObservableProperty] private SolidColorBrush _serverStateColor = Brush("#7d8590");
+    [ObservableProperty] private string _dbHost = "localhost";
+    [ObservableProperty] private string _dbPortText = "3306";
+    [ObservableProperty] private string _dbUser = string.Empty;
+    [ObservableProperty] private string _dbPassword = string.Empty;
+    [ObservableProperty] private string _dbDatabase = string.Empty;
+    [ObservableProperty] private string _mysqldumpPath = "mysqldump";
+    [ObservableProperty] private string _statusMessage = "Loading local backup service...";
+    [ObservableProperty] private string _backupStateText = "Unknown";
+    [ObservableProperty] private SolidColorBrush _backupStateColor = Brush("#7d8590");
     [ObservableProperty] private string _nextRunText = "-";
     [ObservableProperty] private string _lastRunText = "-";
     [ObservableProperty] private string _lastDurationText = "-";
@@ -33,30 +40,23 @@ public partial class BackupViewModel : ObservableObject
     [ObservableProperty] private string _lastFilePath = string.Empty;
     [ObservableProperty] private string _lastError = string.Empty;
 
-    public BackupViewModel()
+    public BackupViewModel(LocalBackupService backupService)
     {
-        _ws.BackupUpdated += OnBackupUpdated;
-        _ws.Disconnected += reason => OnUi(() =>
-        {
-            StatusMessage = $"Disconnected: {reason}";
-            ServerStateText = "Disconnected";
-            ServerStateColor = Brush("#ef4444");
-        });
+        _backupService = backupService;
     }
 
     public async Task StartAsync()
     {
         try
         {
-            var url = ClientConfig.ResolveServerUrl();
-            await _ws.ConnectForBackupsAsync(url);
+            Subscribe();
             await RefreshAsync();
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Connection error: {ex.Message}";
-            ServerStateText = "Error";
-            ServerStateColor = Brush("#ef4444");
+            StatusMessage = $"Backup service error: {ex.Message}";
+            BackupStateText = "Error";
+            BackupStateColor = Brush("#ef4444");
         }
         finally
         {
@@ -64,19 +64,25 @@ public partial class BackupViewModel : ObservableObject
         }
     }
 
-    public async Task StopAsync() => await _ws.DisposeAsync();
+    public Task StopAsync()
+    {
+        if (_subscribed)
+        {
+            _backupService.BackupUpdated -= OnBackupUpdated;
+            _subscribed = false;
+        }
+
+        return Task.CompletedTask;
+    }
 
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (!_ws.IsConnected)
-            return;
-
         try
         {
             IsBusy = true;
             StatusMessage = "Loading backup status...";
-            var status = await _ws.GetBackupStatusAsync();
+            var status = await _backupService.GetStatusAsync();
             ApplyStatus(status);
             await LoadRunsAsync();
             StatusMessage = "Backup status loaded.";
@@ -84,8 +90,8 @@ public partial class BackupViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusMessage = $"Could not load backups: {ex.Message}";
-            ServerStateText = "Error";
-            ServerStateColor = Brush("#ef4444");
+            BackupStateText = "Error";
+            BackupStateColor = Brush("#ef4444");
         }
         finally
         {
@@ -96,23 +102,30 @@ public partial class BackupViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveConfigAsync()
     {
-        if (!ValidateInputs(out var retentionDays))
+        if (!ValidateInputs(out var retentionDays, out var dbPort))
             return;
 
         try
         {
             IsBusy = true;
             StatusMessage = "Saving backup configuration...";
-            var saved = await _ws.UpdateBackupConfigAsync(new BackupConfig
+            var saved = await _backupService.UpdateConfigAsync(new BackupConfig
             {
                 Enabled = Enabled,
                 BackupTime = BackupTime.Trim(),
                 RetentionDays = retentionDays,
-                BackupDir = BackupDir.Trim()
+                BackupDir = BackupDir.Trim(),
+                Timezone = string.IsNullOrWhiteSpace(Timezone) ? TimeZoneInfo.Local.Id : Timezone.Trim(),
+                DbHost = DbHost.Trim(),
+                DbPort = dbPort,
+                DbUser = DbUser.Trim(),
+                DbPassword = DbPassword,
+                DbDatabase = DbDatabase.Trim(),
+                MysqldumpPath = MysqldumpPath.Trim()
             });
 
             ApplyConfig(saved);
-            var status = await _ws.GetBackupStatusAsync();
+            var status = await _backupService.GetStatusAsync();
             ApplyStatus(status);
             StatusMessage = "Backup configuration saved.";
         }
@@ -129,9 +142,6 @@ public partial class BackupViewModel : ObservableObject
     [RelayCommand]
     private async Task RunNowAsync()
     {
-        if (!_ws.IsConnected)
-            return;
-
         var result = MessageBox.Show(
             "Start a database backup now?",
             "Run Backup",
@@ -145,11 +155,11 @@ public partial class BackupViewModel : ObservableObject
         {
             IsBusy = true;
             StatusMessage = "Starting manual backup...";
-            var started = await _ws.RunBackupNowAsync();
+            var started = await _backupService.StartManualBackupAsync();
             StatusMessage = started
                 ? "Manual backup started. The status will update when it finishes."
                 : "A backup is already running.";
-            var status = await _ws.GetBackupStatusAsync();
+            var status = await _backupService.GetStatusAsync();
             ApplyStatus(status);
             await LoadRunsAsync();
         }
@@ -163,9 +173,11 @@ public partial class BackupViewModel : ObservableObject
         }
     }
 
-    private bool ValidateInputs(out int retentionDays)
+    private bool ValidateInputs(out int retentionDays, out int dbPort)
     {
         retentionDays = 0;
+        dbPort = 0;
+
         var time = BackupTime.Trim();
         if (!TimeRegex.IsMatch(time))
         {
@@ -185,9 +197,52 @@ public partial class BackupViewModel : ObservableObject
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(DbHost))
+        {
+            StatusMessage = "Database host is required.";
+            return false;
+        }
+
+        if (!int.TryParse(DbPortText.Trim(), out dbPort) || dbPort < 1 || dbPort > 65535)
+        {
+            StatusMessage = "Database port must be between 1 and 65535.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(DbUser))
+        {
+            StatusMessage = "Database user is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(DbDatabase))
+        {
+            StatusMessage = "Database name is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(MysqldumpPath))
+        {
+            StatusMessage = "mysqldump path is required.";
+            return false;
+        }
+
         BackupTime = time;
         BackupDir = BackupDir.Trim();
+        DbHost = DbHost.Trim();
+        DbPortText = dbPort.ToString();
+        DbUser = DbUser.Trim();
+        DbDatabase = DbDatabase.Trim();
+        MysqldumpPath = MysqldumpPath.Trim();
         return true;
+    }
+
+    private void Subscribe()
+    {
+        if (_subscribed)
+            return;
+        _backupService.BackupUpdated += OnBackupUpdated;
+        _subscribed = true;
     }
 
     private void OnBackupUpdated(BackupStatus status)
@@ -213,7 +268,7 @@ public partial class BackupViewModel : ObservableObject
 
     private async Task LoadRunsAsync()
     {
-        var runs = await _ws.GetBackupRunsAsync();
+        var runs = await _backupService.GetRunsAsync();
         OnUi(() =>
         {
             Runs.Clear();
@@ -227,7 +282,7 @@ public partial class BackupViewModel : ObservableObject
         ApplyConfig(status.Config);
 
         var last = status.LastRun;
-        ServerStateText = status.IsRunning
+        BackupStateText = status.IsRunning
             ? "Running"
             : last?.Status?.ToUpperInvariant() switch
             {
@@ -237,7 +292,7 @@ public partial class BackupViewModel : ObservableObject
                 _ => "Ready"
             };
 
-        ServerStateColor = status.IsRunning
+        BackupStateColor = status.IsRunning
             ? Brush("#58a6ff")
             : last?.Status?.ToUpperInvariant() switch
             {
@@ -264,6 +319,12 @@ public partial class BackupViewModel : ObservableObject
         RetentionDaysText = Math.Max(1, config.RetentionDays).ToString();
         BackupDir = config.BackupDir;
         Timezone = config.Timezone;
+        DbHost = config.DbHost;
+        DbPortText = config.DbPort.ToString();
+        DbUser = config.DbUser;
+        DbPassword = config.DbPassword;
+        DbDatabase = config.DbDatabase;
+        MysqldumpPath = config.MysqldumpPath;
     }
 
     private static string FormatDate(DateTime? value)

@@ -20,7 +20,7 @@ SetupIconFile=src\MesControlCenter.UI\Resources\Logo.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-; Writing machine-wide environment variables requires admin rights.
+; Admin rights are used for the elevated startup scheduled task.
 PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 
@@ -37,19 +37,6 @@ Source: "publish\MesControlCenter.UI.exe"; DestDir: "{app}"; Flags: ignoreversio
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-
-[Registry]
-; WebSocket server URL as a machine-wide environment variable. MySQL credentials
-; no longer live on client machines — only this URL (and optionally the admin
-; token for dashboards) do.
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
-    ValueType: string; ValueName: "MESCC_SERVER_URL"; ValueData: "{code:GetServerUrl}"; \
-    Flags: preservestringtype; Check: ShouldWriteServerUrl
-
-; Admin token (only needed on machines that open the admin dashboard). Optional.
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
-    ValueType: string; ValueName: "MESCC_ADMIN_TOKEN"; ValueData: "{code:GetAdminToken}"; \
-    Flags: preservestringtype; Check: ShouldWriteAdminToken
 
 [Run]
 ; Autostart al iniciar sesión, ELEVADO (admin) y SIN prompt de UAC, para que la
@@ -69,40 +56,3 @@ Filename: "schtasks"; Parameters: "/delete /tn ""{#MyAppName}"" /f"; Flags: runh
 [UninstallDelete]
 Type: files; Name: "{app}\*"
 Type: dirifempty; Name: "{app}"
-
-[Code]
-var
-  CfgPage: TInputQueryWizardPage;
-
-procedure InitializeWizard;
-begin
-  CfgPage := CreateInputQueryPage(wpSelectTasks,
-    'Conexión al servidor',
-    'Servidor WebSocket de MES Control Center',
-    'Indica la URL del servidor WS (p.ej. ws://192.168.1.10:8092/ws). El token admin ' +
-    'solo es necesario en equipos que abran el panel de administración; puede dejarse en blanco.');
-  CfgPage.Add('URL del servidor (ws:// o wss://):', False);
-  CfgPage.Add('Token admin (opcional):', True);
-  CfgPage.Values[0] := GetEnv('MESCC_SERVER_URL');
-  CfgPage.Values[1] := GetEnv('MESCC_ADMIN_TOKEN');
-end;
-
-function GetServerUrl(Param: string): string;
-begin
-  Result := Trim(CfgPage.Values[0]);
-end;
-
-function GetAdminToken(Param: string): string;
-begin
-  Result := Trim(CfgPage.Values[1]);
-end;
-
-function ShouldWriteServerUrl: Boolean;
-begin
-  Result := Trim(CfgPage.Values[0]) <> '';
-end;
-
-function ShouldWriteAdminToken: Boolean;
-begin
-  Result := Trim(CfgPage.Values[1]) <> '';
-end;

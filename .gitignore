@@ -24,9 +24,8 @@ packages/
 *.nupkg
 *.snupkg
 
-# Node / server
+# Node / npm script workspaces
 node_modules/
-server/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -38,7 +37,6 @@ dist/
 .env
 .env.*
 !.env.example
-server/.env
 
 # Logs and runtime data
 *.log
@@ -51,7 +49,6 @@ server/.env
 agent_commands.json
 pc_monitor_config.json
 backups/
-server/backups/
 *.sql
 *.sql.gz
 

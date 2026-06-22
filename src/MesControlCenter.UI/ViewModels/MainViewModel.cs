@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
@@ -18,16 +17,16 @@ using MesControlCenter.Core.Models;
 using MesControlCenter.Core.Services;
 using MesControlCenter.UI.Helpers;
 using MesControlCenter.UI.Views;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MesControlCenter.UI.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
     private readonly IScriptConfigRepository _configRepo;
-    private readonly ICredentialService _credentials;
     private readonly GitDeployService _gitDeployService;
     private readonly ResourceMonitorService _resourceMonitorService;
-    private readonly WsAgentClient _wsAgent;
+    private readonly LocalBackupService _backupService;
 
     // Script entries and processes
     private readonly Dictionary<string, ScriptEntry>    _entries    = new();
@@ -63,6 +62,7 @@ public partial class MainViewModel : ObservableObject
     private static readonly TimeSpan ConfigSaveDebounceInterval = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan ResourceMonitorInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan TemperatureMonitorInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DatabaseMonitorInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan TemperatureReadTimeout = TimeSpan.FromSeconds(2);
     private static readonly Regex AnsiEscapeRegex = new(
         "\u001B(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~])",
@@ -70,25 +70,19 @@ public partial class MainViewModel : ObservableObject
     private readonly record struct QueuedLogMessage(string EntryId, string Text);
 
     // Timers
-    private DispatcherTimer? _agentPollTimer;
     private DispatcherTimer? _autoStartTimer;
     private DispatcherTimer? _logFlushTimer;
     private DispatcherTimer? _logUiTimer;
     private DispatcherTimer? _configSaveTimer;
     private DispatcherTimer? _resourceMonitorTimer;
     private DispatcherTimer? _temperatureMonitorTimer;
+    private DispatcherTimer? _databaseMonitorTimer;
     private bool _configSavePending;
     private bool _resourceRefreshInProgress;
+    private bool _databaseRefreshInProgress;
     private Task<(double? ValueC, string Source)>? _temperatureReadTask;
 
-    // Integrated agent state
-    private CancellationTokenSource? _agentCts;
     private CancellationTokenSource? _gitCommitCts;
-    private bool _agentRunning;
-
-    private static readonly string AgentCmdFile = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".script_control_center", "agent_commands.json");
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -96,16 +90,14 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(
         IScriptConfigRepository configRepo,
-        ICredentialService credentials,
         GitDeployService gitDeployService,
         ResourceMonitorService resourceMonitorService,
-        WsAgentClient wsAgent)
+        LocalBackupService backupService)
     {
         _configRepo = configRepo;
-        _credentials = credentials;
         _gitDeployService = gitDeployService;
         _resourceMonitorService = resourceMonitorService;
-        _wsAgent = wsAgent;
+        _backupService = backupService;
 
         Scripts = new ObservableCollection<ScriptEntryViewModel>();
         FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
@@ -151,9 +143,6 @@ public partial class MainViewModel : ObservableObject
     private string _globalStatusImageUri = "pack://application:,,,/Resources/DESCONECTADO.png";
 
     [ObservableProperty]
-    private string _agentStatusText = "Agent: Inactive";
-
-    [ObservableProperty]
     private string _pcTemperatureText = "N/A";
 
     [ObservableProperty]
@@ -170,6 +159,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _sysRamText = "—";
     [ObservableProperty] private string _sysRamDetail = string.Empty;
     [ObservableProperty] private string _sysTempText = "—";
+    [ObservableProperty] private string _dbStatusText = "DB";
+    [ObservableProperty] private SolidColorBrush _dbStatusColor = new((Color)ColorConverter.ConvertFromString("#7d8590"));
+    [ObservableProperty] private string _dbStatusToolTip = "Database status not checked yet.";
 
     // Selected-script usage (detail panel)
     [ObservableProperty] private string _procUsagePid = string.Empty;
@@ -206,11 +198,6 @@ public partial class MainViewModel : ObservableObject
         };
         _autoStartTimer.Start();
 
-        // Agent command polling every 3 seconds (reads agent_commands.json)
-        _agentPollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _agentPollTimer.Tick += (_, _) => PollAgentCommands();
-        _agentPollTimer.Start();
-
         // Flush logs to disk and clear buffers every hour to prevent UI lag
         _logFlushTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
         _logFlushTimer.Tick += (_, _) => FlushAndClearLogs();
@@ -226,9 +213,10 @@ public partial class MainViewModel : ObservableObject
         _temperatureMonitorTimer.Start();
         _ = RefreshTemperatureAsync();
 
-        // Auto-start the integrated agent if config exists
-        if (_credentials.ConfigExists())
-            StartPcMonitorAgent();
+        _databaseMonitorTimer = new DispatcherTimer { Interval = DatabaseMonitorInterval };
+        _databaseMonitorTimer.Tick += async (_, _) => await RefreshDatabaseStatusAsync();
+        _databaseMonitorTimer.Start();
+        _ = RefreshDatabaseStatusAsync();
     }
 
     // ═══════ Config I/O ═══════
@@ -790,6 +778,38 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private async Task RefreshDatabaseStatusAsync()
+    {
+        if (_databaseRefreshInProgress)
+            return;
+
+        _databaseRefreshInProgress = true;
+        try
+        {
+            var status = await _backupService.CheckDatabaseHealthAsync(TimeSpan.FromSeconds(4));
+            var checkedAt = status.CheckedAt.ToString("HH:mm:ss");
+
+            if (!status.IsConfigured)
+            {
+                DbStatusColor = Brush("#7d8590");
+                DbStatusToolTip = $"DB not configured. Last check: {checkedAt}";
+                return;
+            }
+
+            DbStatusColor = status.IsOnline ? Brush("#3fb950") : Brush("#f85149");
+            DbStatusToolTip = $"{status.Message} Last check: {checkedAt}";
+        }
+        catch (Exception ex)
+        {
+            DbStatusColor = Brush("#f85149");
+            DbStatusToolTip = $"Database check failed: {ex.Message}";
+        }
+        finally
+        {
+            _databaseRefreshInProgress = false;
+        }
+    }
+
     // Only the currently selected script (if it's running). The user wants the
     // usage of the one they picked, not a table of everything.
     private IReadOnlyCollection<RunningScriptProcess> GetRunningScriptProcesses()
@@ -836,6 +856,9 @@ public partial class MainViewModel : ObservableObject
         ProcUsageCpu = $"{u.CpuPercent:0.0}%";
         ProcUsageRam = u.MemoryMb >= 1024 ? $"{u.MemoryMb / 1024d:0.0} GB" : $"{u.MemoryMb:0} MB";
     }
+
+    private static SolidColorBrush Brush(string color)
+        => new((Color)ColorConverter.ConvertFromString(color));
 
     // ═══════ Commands ═══════
 
@@ -1123,28 +1146,11 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenPcMonitor()
-    {
-        // Show menu-like selection
-        var result = MessageBox.Show(
-            "Choose an option:\n\n" +
-            "[Yes] = Configure PC Monitor\n" +
-            "[No] = Open Dashboard (ADMIN)",
-            "PC Monitor",
-            MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-        if (result == MessageBoxResult.Yes)
-            ConfigurePcMonitor();
-        else if (result == MessageBoxResult.No)
-            OpenPcMonitorDashboard();
-    }
-
-    [RelayCommand]
     private void OpenBackups()
     {
         try
         {
-            var backupVm = new BackupViewModel();
+            var backupVm = App.Services.GetRequiredService<BackupViewModel>();
             var backupWindow = new BackupWindow
             {
                 Owner = Application.Current.MainWindow,
@@ -1916,65 +1922,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ═══════ Agent Command Polling (reads agent_commands.json) ═══════
-
-    private void PollAgentCommands()
-    {
-        try
-        {
-            if (!File.Exists(AgentCmdFile)) return;
-
-            var raw = File.ReadAllText(AgentCmdFile).Trim();
-            if (string.IsNullOrEmpty(raw)) return;
-
-            List<JsonElement>? commands;
-            try { commands = JsonSerializer.Deserialize<List<JsonElement>>(raw); }
-            catch { return; }
-
-            if (commands == null || commands.Count == 0) return;
-
-            // Clear file immediately
-            File.WriteAllText(AgentCmdFile, "[]");
-
-            foreach (var cmd in commands)
-            {
-                var action = cmd.TryGetProperty("action", out var actionProp) ? actionProp.GetString() : "";
-
-                if (action == "restart_script")
-                {
-                    var scriptName = cmd.TryGetProperty("script_name", out var snProp) ? snProp.GetString() : "";
-                    if (string.IsNullOrEmpty(scriptName)) continue;
-
-                    var match = _entries.FirstOrDefault(kv =>
-                        System.IO.Path.GetFileName(kv.Value.Path).Equals(scriptName, StringComparison.OrdinalIgnoreCase));
-
-                    if (match.Value != null)
-                    {
-                        if (_processes.ContainsKey(match.Key))
-                        {
-                            StopEntry(match.Key);
-                            // Delay restart
-                            var eid = match.Key;
-                            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-                            timer.Tick += (_, _) => { timer.Stop(); RunEntry(eid); };
-                            timer.Start();
-                        }
-                        else
-                        {
-                            RunEntry(match.Key);
-                        }
-                    }
-                }
-                else if (action == "run_all") RunAll();
-                else if (action == "stop_all") StopAll();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[CC] Error polling agent commands: {ex.Message}");
-        }
-    }
-
     // ═══════ Global Status ═══════
 
     private void UpdateGlobalStatus()
@@ -2010,113 +1957,16 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ═══════ Integrated PC Monitor Agent ═══════
-
-    private void StartPcMonitorAgent()
-    {
-        if (_agentRunning) return;
-
-        var config = _credentials.LoadConfig();
-        if (config == null)
-        {
-            Console.WriteLine("[AGENT] No config found, agent not started.");
-            return;
-        }
-
-        if (!ClientConfig.IsConfigured())
-        {
-            Console.WriteLine("[AGENT] Server URL not configured (MESCC_SERVER_URL); agent not started.");
-            Application.Current.Dispatcher.Invoke(() => AgentStatusText = "Agent: Sin servidor");
-            return;
-        }
-
-        _agentRunning = true;
-        _agentCts = new CancellationTokenSource();
-        var token = _agentCts.Token;
-
-        Console.WriteLine($"[AGENT] Starting integrated WS agent for PC: {config.PcName}");
-        Application.Current.Dispatcher.Invoke(() => AgentStatusText = $"Agent: {config.PcName}");
-
-        // The WsAgentClient executes received commands through CommandExecutorService,
-        // which writes restart signals into agent_commands.json. PollAgentCommands
-        // (UI thread) then applies them to the in-process scripts.
-        _wsAgent.OnLog = line => Console.WriteLine(line);
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await _wsAgent.RunAsync(token);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[AGENT] Fatal error: {ex.Message}");
-            }
-            finally
-            {
-                _agentRunning = false;
-                Application.Current.Dispatcher.Invoke(() => AgentStatusText = "Agent: Inactive");
-                Console.WriteLine("[AGENT] Agent stopped.");
-            }
-        }, token);
-    }
-
-    // ═══════ PC Monitor UI ═══════
-
-    private void ConfigurePcMonitor()
-    {
-        try
-        {
-            var installerWindow = new InstallerWizardWindow();
-            installerWindow.Owner = Application.Current.MainWindow;
-            if (installerWindow.ShowDialog() == true)
-            {
-                // Start the agent now that config exists
-                if (!_agentRunning)
-                    StartPcMonitorAgent();
-
-                MessageBox.Show(
-                    "PC Monitor configured and agent started!\n\nThe system is now sending status to the server.",
-                    "Agent Started", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Could not open configuration:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void OpenPcMonitorDashboard()
-    {
-        try
-        {
-            var loginWindow = new LoginWindow();
-            loginWindow.Owner = Application.Current.MainWindow;
-            if (loginWindow.ShowDialog() == true)
-            {
-                var dashboardVm = new DashboardViewModel();
-                var dashboardWindow = new DashboardWindow();
-                dashboardWindow.DataContext = dashboardVm;
-                dashboardWindow.Show();
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Could not open PC Monitor: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
     // ═══════ Cleanup ═══════
 
     public void Shutdown()
     {
-        _agentPollTimer?.Stop();
         _logFlushTimer?.Stop();
         _logUiTimer?.Stop();
         _configSaveTimer?.Stop();
         _resourceMonitorTimer?.Stop();
         _temperatureMonitorTimer?.Stop();
-        _agentCts?.Cancel();
+        _databaseMonitorTimer?.Stop();
         _gitCommitCts?.Cancel();
 
         foreach (var t in _healthTimers.Values) t.Stop();
