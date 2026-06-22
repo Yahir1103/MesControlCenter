@@ -94,6 +94,30 @@ const send = (ws, obj) => ws.send(JSON.stringify(obj));
     await delay(500);
     ok(dashMsgs.some((m) => m.type === 'backup_runs'), 'dashboard recibe backup_runs');
 
+    // Backup monitor without admin token.
+    const backup = await connect('backup');
+    const backupMsgs = [];
+    backup.on('message', (raw) => {
+        const m = JSON.parse(raw.toString());
+        backupMsgs.push(m);
+        log('backup<-', m.type);
+    });
+
+    send(backup, { type: 'auth', role: 'backup' });
+    await delay(500);
+    ok(backupMsgs.some((m) => m.type === 'auth_ok'), 'backup monitor autentica sin token admin');
+
+    send(backup, { type: 'get_backup_status' });
+    await delay(500);
+    ok(backupMsgs.some((m) => m.type === 'backup_status'), 'backup monitor recibe backup_status');
+
+    send(backup, { type: 'get_pcs' });
+    await delay(500);
+    ok(
+        backupMsgs.some((m) => m.type === 'error' && m.error === 'unknown_backup_message: get_pcs'),
+        'backup monitor no puede consultar dashboard'
+    );
+
     if (process.env.SMOKE_RUN_BACKUP === '1') {
         send(dash, { type: 'run_backup_now' });
         await delay(1000);
@@ -120,6 +144,7 @@ const send = (ws, obj) => ws.send(JSON.stringify(obj));
 
     agent.close();
     dash.close();
+    backup.close();
     await delay(200);
 
     console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);

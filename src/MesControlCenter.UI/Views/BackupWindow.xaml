@@ -91,9 +91,9 @@
 
                             <TextBlock Text="Backup folder" FontSize="11" FontWeight="Medium"
                                        Foreground="#7d8590" Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding BackupDir}" Foreground="#e6edf3"
-                                       TextWrapping="Wrap" FontSize="12" FontFamily="Cascadia Code, Consolas"
-                                       Margin="0,0,0,16"/>
+                            <TextBox Text="{Binding BackupDir, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="./backups" FontFamily="Cascadia Code, Consolas"
+                                     Margin="0,0,0,16"/>
 
                             <StackPanel Orientation="Horizontal">
                                 <Button Content="Save" Style="{StaticResource SuccessButton}"

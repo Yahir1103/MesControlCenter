@@ -49,17 +49,7 @@ public partial class BackupViewModel : ObservableObject
         try
         {
             var url = ClientConfig.ResolveServerUrl();
-            var token = ClientConfig.ResolveAdminToken();
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                IsLoading = false;
-                StatusMessage = "Falta el token admin (MESCC_ADMIN_TOKEN).";
-                ServerStateText = "No token";
-                ServerStateColor = Brush("#d29922");
-                return;
-            }
-
-            await _ws.ConnectAsync(url, token);
+            await _ws.ConnectForBackupsAsync(url);
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -117,7 +107,8 @@ public partial class BackupViewModel : ObservableObject
             {
                 Enabled = Enabled,
                 BackupTime = BackupTime.Trim(),
-                RetentionDays = retentionDays
+                RetentionDays = retentionDays,
+                BackupDir = BackupDir.Trim()
             });
 
             ApplyConfig(saved);
@@ -188,7 +179,14 @@ public partial class BackupViewModel : ObservableObject
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(BackupDir))
+        {
+            StatusMessage = "Backup folder is required.";
+            return false;
+        }
+
         BackupTime = time;
+        BackupDir = BackupDir.Trim();
         return true;
     }
 

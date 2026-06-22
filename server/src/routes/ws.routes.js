@@ -1,6 +1,6 @@
 const { hashApiSecret, safeEquals } = require('../auth');
 
-// Endpoint WebSocket único para agentes y dashboards.
+// Endpoint WebSocket único para agentes, dashboards y backups.
 // El primer mensaje DEBE ser { type: "auth", ... }; sin auth válida se cierra.
 module.exports = async function (app) {
     await app.register(require('@fastify/websocket'));
@@ -10,7 +10,7 @@ module.exports = async function (app) {
 
         // Estado por conexión
         let authed = false;
-        let role = null;        // 'agent' | 'dashboard'
+        let role = null;        // 'agent' | 'dashboard' | 'backup'
         let pcKey = null;
         let pcId = null;
 
@@ -40,6 +40,8 @@ module.exports = async function (app) {
                     await handleAgentMessage(msg);
                 } else if (role === 'dashboard') {
                     await handleDashboardMessage(msg);
+                } else if (role === 'backup') {
+                    await handleBackupMessage(msg);
                 }
             } catch (err) {
                 app.log.error(`Error procesando mensaje (${role}): ${err.message}`);
@@ -53,7 +55,7 @@ module.exports = async function (app) {
                 // Marcar inactiva al desconectarse y avisar a dashboards.
                 app.pcRepo.updateHeartbeat(pcKey, false).catch(() => {});
                 app.hub.broadcastDashboards({ type: 'pc_update', pc_key: pcKey, is_active: false });
-            } else if (role === 'dashboard') {
+            } else if (role === 'dashboard' || role === 'backup') {
                 app.hub.unregisterDashboard(socket);
             }
         });
@@ -125,6 +127,14 @@ module.exports = async function (app) {
                 // Snapshot inicial.
                 const pcs = await app.pcRepo.getAllPcs();
                 send({ type: 'pcs_snapshot', pcs });
+                return;
+            }
+
+            if (msg.role === 'backup') {
+                authed = true;
+                role = 'backup';
+                app.hub.registerDashboard(socket);
+                send({ type: 'auth_ok' });
                 return;
             }
 
@@ -208,6 +218,19 @@ module.exports = async function (app) {
                     send({ type: 'pc_deleted', pc_key: msg.pc_key });
                     break;
                 }
+                case 'get_backup_status':
+                case 'get_backup_runs':
+                case 'update_backup_config':
+                case 'run_backup_now':
+                    await handleBackupMessage(msg);
+                    break;
+                default:
+                    send({ type: 'error', error: `unknown_dashboard_message: ${msg.type}` });
+            }
+        }
+
+        async function handleBackupMessage(msg) {
+            switch (msg.type) {
                 case 'get_backup_status': {
                     send({ type: 'backup_status', ...(await app.backupService.getStatus()) });
                     break;
@@ -228,7 +251,7 @@ module.exports = async function (app) {
                     break;
                 }
                 default:
-                    send({ type: 'error', error: `unknown_dashboard_message: ${msg.type}` });
+                    send({ type: 'error', error: `unknown_backup_message: ${msg.type}` });
             }
         }
     });

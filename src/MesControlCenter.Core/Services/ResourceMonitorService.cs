@@ -347,8 +347,9 @@ public sealed class ResourceMonitorService
                 }
 
                 var temperatures = new List<double>();
+                var visited = new HashSet<IHardware>(ReferenceEqualityComparer.Instance);
                 foreach (var hardware in _hardwareMonitor.Hardware)
-                    ReadHardwareTemperatures(hardware, temperatures);
+                    ReadHardwareTemperatures(hardware, temperatures, visited);
 
                 return temperatures.Count == 0
                     ? null
@@ -362,12 +363,18 @@ public sealed class ResourceMonitorService
         }
     }
 
-    private static void ReadHardwareTemperatures(IHardware hardware, ICollection<double> temperatures)
+    private static void ReadHardwareTemperatures(
+        IHardware hardware,
+        ICollection<double> temperatures,
+        ISet<IHardware> visited)
     {
+        if (!visited.Add(hardware))
+            return;
+
         hardware.Update();
 
         foreach (var subHardware in hardware.SubHardware)
-            ReadHardwareTemperatures(subHardware, temperatures);
+            ReadHardwareTemperatures(subHardware, temperatures, visited);
 
         foreach (var sensor in hardware.Sensors)
         {

@@ -7,9 +7,7 @@ using MesControlCenter.Core.Models;
 namespace MesControlCenter.Core.Services;
 
 /// <summary>
-/// WebSocket client for the admin dashboard. Authenticates with the admin token,
-/// receives an initial PC snapshot plus live push updates, and sends commands
-/// (RESTART_SCRIPT, PING, DELETE_PC) and queries (get_scripts) over the socket.
+/// WebSocket client for the admin dashboard and backup monitor.
 /// </summary>
 public class WsDashboardClient : IAsyncDisposable
 {
@@ -40,12 +38,18 @@ public class WsDashboardClient : IAsyncDisposable
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
     public async Task ConnectAsync(string url, string adminToken, CancellationToken ct = default)
+        => await ConnectWithAuthAsync(url, new { type = "auth", role = "dashboard", token = adminToken }, ct);
+
+    public async Task ConnectForBackupsAsync(string url, CancellationToken ct = default)
+        => await ConnectWithAuthAsync(url, new { type = "auth", role = "backup" }, ct);
+
+    private async Task ConnectWithAuthAsync(string url, object authMessage, CancellationToken ct = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _ws = new ClientWebSocket();
         await _ws.ConnectAsync(new Uri(url), _cts.Token);
 
-        await SendAsync(new { type = "auth", role = "dashboard", token = adminToken });
+        await SendAsync(authMessage);
 
         _receiveTask = Task.Run(() => ReceiveLoopAsync(_cts.Token));
     }
@@ -100,7 +104,8 @@ public class WsDashboardClient : IAsyncDisposable
             {
                 enabled = config.Enabled,
                 backup_time = config.BackupTime,
-                retention_days = config.RetentionDays
+                retention_days = config.RetentionDays,
+                backup_dir = config.BackupDir
             }
         });
 

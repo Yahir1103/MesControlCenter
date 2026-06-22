@@ -512,7 +512,7 @@ public partial class MainViewModel : ObservableObject
     // the whole tree (cmd → npm → node) reliably.
     private void RegisterProcess(string entryId, Process proc)
     {
-        RegisterProcess(entryId, proc);
+        _processes[entryId] = proc;
         try
         {
             var job = new ProcessJob();
@@ -1144,14 +1144,13 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            var loginWindow = new LoginWindow();
-            loginWindow.Owner = Application.Current.MainWindow;
-            if (loginWindow.ShowDialog() == true)
+            var backupVm = new BackupViewModel();
+            var backupWindow = new BackupWindow
             {
-                var backupVm = new BackupViewModel();
-                var backupWindow = new BackupWindow { DataContext = backupVm };
-                backupWindow.Show();
-            }
+                Owner = Application.Current.MainWindow,
+                DataContext = backupVm
+            };
+            backupWindow.Show();
         }
         catch (Exception ex)
         {
