@@ -1,0 +1,23 @@
+{
+  "name": "mescc-ws-server",
+  "version": "1.0.0",
+  "description": "MES Control Center - servidor WebSocket intermedio (agentes <-> MySQL <-> dashboards)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^8.2.0",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.24.3",
+    "fastify-plugin": "^4.5.1",
+    "mysql2": "^3.6.5",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "ws": "^8.21.0"
+  },
+  "license": "ISC"
+}

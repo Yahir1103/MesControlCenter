@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Resources\Logo.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Logo.ico" />
+    <Resource Include="Resources\logoLogIn.png" />
+    <Resource Include="Resources\CONECTADO.png" />
+    <Resource Include="Resources\DESCONECTADO.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MesControlCenter.Core\MesControlCenter.Core.csproj" />
+    <ProjectReference Include="..\MesControlCenter.Data\MesControlCenter.Data.csproj" />
+  </ItemGroup>
+
+</Project>

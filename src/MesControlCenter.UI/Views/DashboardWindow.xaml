@@ -1,0 +1,126 @@
+<Window x:Class="MesControlCenter.UI.Views.DashboardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PC Monitor Dashboard" Height="750" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBgBrush}"
+        Foreground="{StaticResource ForegroundBrush}"
+        Loaded="Window_Loaded" Closing="Window_Closing">
+    <DockPanel>
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Padding="16,12" Background="#161b22"
+                BorderBrush="#21262d" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                    <Border CornerRadius="8" Width="32" Height="32" Margin="0,0,12,0"
+                            Background="#388bfd">
+                        <Path Data="{StaticResource MonitorGeometry}" Stroke="White" StrokeThickness="1.2"
+                              Width="16" Height="14" Stretch="Uniform"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="PC Monitor Dashboard" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="#e6edf3"/>
+                        <TextBlock Text="Real-time workstation monitoring" FontSize="10"
+                                   Foreground="#484f58" Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <Button Content="Refresh" Style="{StaticResource AccentButton}" Margin="20,0,0,0"
+                            Padding="14,5" FontSize="11"
+                            Command="{Binding RefreshCommand}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" DockPanel.Dock="Right"
+                           Foreground="#7d8590" FontSize="11"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Content -->
+        <Grid Margin="10">
+            <!-- Loading message -->
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding StatusMessage}"
+                           FontSize="14" Foreground="#7d8590"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- PC Cards Grid -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding IsLoading, Converter={StaticResource InverseBoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding PcCards}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="3"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <!-- PC Card -->
+                            <Border Margin="6" CornerRadius="8"
+                                    Background="#161b22"
+                                    BorderBrush="{Binding StatusBorderBrush}"
+                                    BorderThickness="1"
+                                    MinWidth="300" MinHeight="180">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Card Header -->
+                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" Padding="14,10,14,8"
+                                            Background="#1c2128">
+                                        <DockPanel>
+                                            <TextBlock Text="{Binding PcName}" FontSize="15" FontWeight="SemiBold"
+                                                       Foreground="#e6edf3" DockPanel.Dock="Left"
+                                                       VerticalAlignment="Center"/>
+                                            <!-- Status Badge -->
+                                            <Border CornerRadius="10" Padding="8,3" HorizontalAlignment="Right"
+                                                    DockPanel.Dock="Right" Background="#0e1117">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="7" Height="7"
+                                                             Fill="{Binding StatusBorderBrush}" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusBorderBrush}"
+                                                               FontWeight="Medium" FontSize="10"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <!-- Card Body -->
+                                    <StackPanel Grid.Row="1" Margin="14,8,14,0">
+                                        <TextBlock Text="{Binding LastSeenText}" Margin="0,0,0,3"
+                                                   Foreground="#7d8590" FontSize="11"/>
+                                        <TextBlock FontSize="11">
+                                            <Run Text="Role: " Foreground="#484f58"/>
+                                            <Run Text="{Binding Role, Mode=OneWay}" Foreground="#7d8590" FontWeight="Medium"/>
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <!-- Card Actions -->
+                                    <Border Grid.Row="2" Padding="12,8,12,10">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Restart All" Style="{StaticResource SuccessButton}"
+                                                    Margin="0,0,4,0" Padding="10,4" FontSize="10"
+                                                    Command="{Binding DataContext.RestartAllScriptsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="Details" Style="{StaticResource AccentButton}"
+                                                    Margin="0,0,4,0" Padding="10,4" FontSize="10"
+                                                    Command="{Binding DataContext.ViewDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="Delete" Style="{StaticResource DangerButton}"
+                                                    Padding="10,4" FontSize="10"
+                                                    Command="{Binding DataContext.DeletePcCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

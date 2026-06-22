@@ -1,0 +1,53 @@
+<Window x:Class="MesControlCenter.UI.Views.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Login - PC Monitor Dashboard" Height="380" Width="380"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#0e1117"
+        Foreground="{StaticResource ForegroundBrush}"
+        KeyDown="Window_KeyDown">
+
+    <Grid>
+        <Border CornerRadius="10" Margin="20"
+                Background="#161b22"
+                BorderBrush="#21262d" BorderThickness="1">
+            <StackPanel Margin="28,24">
+                <!-- Icon -->
+                <Border Width="44" Height="44" CornerRadius="10" Margin="0,0,0,14"
+                        HorizontalAlignment="Center" Background="#388bfd">
+                    <Path Data="{StaticResource MonitorGeometry}" Stroke="White" StrokeThickness="1.3"
+                          Width="22" Height="18" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Title -->
+                <TextBlock Text="Dashboard Login" FontSize="17" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Foreground="#e6edf3" Margin="0,0,0,3"/>
+                <TextBlock Text="Enter your credentials to continue"
+                           FontSize="11" Foreground="#484f58"
+                           HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+                <!-- Username -->
+                <TextBlock Text="Username" FontSize="11" FontWeight="Medium"
+                           Foreground="#7d8590" Margin="0,0,0,4"/>
+                <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                         x:Name="TxtUsername" Tag="Enter username"/>
+
+                <!-- Password -->
+                <TextBlock Text="Password" FontSize="11" FontWeight="Medium"
+                           Foreground="#7d8590" Margin="0,14,0,4"/>
+                <PasswordBox x:Name="PwdBox"/>
+
+                <!-- Error -->
+                <TextBlock Text="{Binding ErrorMessage}" Margin="0,10,0,0"
+                           Foreground="#f85149" TextWrapping="Wrap" FontSize="11"/>
+
+                <!-- Login Button -->
+                <Button Content="Sign In" Style="{StaticResource AccentButton}"
+                        HorizontalAlignment="Stretch" Margin="0,16,0,0"
+                        Click="Login_Click" IsDefault="True"
+                        FontSize="13" Padding="12,9"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

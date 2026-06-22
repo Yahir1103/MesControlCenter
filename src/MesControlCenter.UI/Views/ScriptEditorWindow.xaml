@@ -1,0 +1,285 @@
+<Window x:Class="MesControlCenter.UI.Views.ScriptEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Script Configuration" Height="620" Width="680" MinHeight="520"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
+        Background="#0e1117"
+        Foreground="{StaticResource ForegroundBrush}">
+
+    <Window.Resources>
+        <Style TargetType="TabControl">
+            <Setter Property="Background"   Value="#0e1117"/>
+            <Setter Property="BorderBrush"  Value="#21262d"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+            <Setter Property="Padding"      Value="0"/>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Background"  Value="Transparent"/>
+            <Setter Property="Foreground"  Value="#7d8590"/>
+            <Setter Property="BorderBrush" Value="#21262d"/>
+            <Setter Property="Padding"     Value="16,8"/>
+            <Setter Property="FontSize"    Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Root" Padding="{TemplateBinding Padding}"
+                                BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                                Background="Transparent">
+                            <ContentPresenter ContentSource="Header"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#58a6ff"/>
+                                <Setter Property="Foreground" Value="#e6edf3"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#c9d1d9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- Title -->
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="*"/>      <!-- Tabs -->
+            <RowDefinition Height="Auto"/>   <!-- Error -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>   <!-- Buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Title -->
+        <TextBlock Grid.Row="0" Text="Script Configuration"
+                   FontSize="16" FontWeight="SemiBold" Foreground="#58a6ff"/>
+
+        <!-- Tabs -->
+        <TabControl Grid.Row="2">
+            <!-- ══════════════ GENERAL ══════════════ -->
+            <TabItem Header="General">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+                    <StackPanel>
+                        <!-- Name -->
+                        <TextBlock Text="Name" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding ScriptName, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="Script display name" Margin="0,0,0,12"/>
+
+                        <!-- Script Path -->
+                        <TextBlock Text="Script / Executable" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding ScriptPath, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="Path to script or executable" Margin="0,0,8,0"/>
+                            <Button Grid.Column="1" Content="Browse" Style="{StaticResource DarkButton}"
+                                    Click="BrowseScript_Click" Padding="12,6"/>
+                        </Grid>
+
+                        <!-- Arguments -->
+                        <TextBlock Text="Arguments" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="Optional command-line arguments" Margin="0,0,0,12"/>
+
+                        <!-- Working Dir -->
+                        <TextBlock Text="Working Directory" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding WorkDir, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="Leave empty for script directory" Margin="0,0,8,0"/>
+                            <Button Grid.Column="1" Content="Browse" Style="{StaticResource DarkButton}"
+                                    Click="BrowseWorkDir_Click" Padding="12,6"/>
+                        </Grid>
+
+                        <!-- Interpreter (hidden for exe / bat / cmd / ps1) -->
+                        <StackPanel Visibility="{Binding IsExeMode, Converter={StaticResource InverseBoolToVisibility}}">
+                            <StackPanel Visibility="{Binding IsPs1FileMode, Converter={StaticResource InverseBoolToVisibility}}">
+                                <TextBlock Text="Interpreter" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding Interpreter, UpdateSourceTrigger=PropertyChanged}"
+                                             Tag="e.g. python, py" Margin="0,0,8,0"/>
+                                    <Button Grid.Column="1" Content="Auto-detect" Style="{StaticResource DarkButton}"
+                                            Command="{Binding AutoDetectPythonCommand}" Padding="12,6"/>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Exe / Batch banner -->
+                        <Border CornerRadius="6" Background="#0d2818" Padding="10,6" Margin="0,0,0,12"
+                                Visibility="{Binding IsExeMode, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Executable / Batch script detected — will run directly without interpreter."
+                                       Foreground="#3fb950" FontSize="11"/>
+                        </Border>
+
+                        <!-- PS1 banner -->
+                        <Border CornerRadius="6" Background="#1a1a2e" Padding="10,6" Margin="0,0,0,12"
+                                Visibility="{Binding IsPs1FileMode, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="PowerShell script file detected — will run with powershell.exe -File."
+                                       Foreground="#a371f7" FontSize="11"/>
+                        </Border>
+
+                        <!-- Auto-Start -->
+                        <CheckBox Content="Auto-start when application launches" IsChecked="{Binding AutoStart}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ══════════════ RELIABILITY ══════════════ -->
+            <TabItem Header="Reliability">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+                    <StackPanel>
+                        <!-- Auto-restart header -->
+                        <TextBlock Text="AUTO-RESTART" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,10"/>
+                        <CheckBox Content="Restart automatically on non-zero exit code"
+                                  IsChecked="{Binding AutoRestart}" Margin="0,0,0,10"/>
+
+                        <!-- Restart options (only when enabled) -->
+                        <StackPanel Visibility="{Binding AutoRestart, Converter={StaticResource BoolToVisibility}}"
+                                    Margin="16,0,0,0">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Delay (seconds)" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding RestartDelay, UpdateSourceTrigger=PropertyChanged}" Tag="5"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Max attempts (0 = unlimited)" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding MaxAttempts, UpdateSourceTrigger=PropertyChanged}" Tag="3"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+
+                        <Separator Background="#21262d" Margin="0,14,0,14"/>
+
+                        <!-- Health check header -->
+                        <TextBlock Text="HTTP HEALTH CHECK" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,10"/>
+                        <CheckBox Content="Enable HTTP health check (restart if URL stops responding)"
+                                  IsChecked="{Binding HealthCheckEnabled}" Margin="0,0,0,10"/>
+
+                        <!-- Health check options (only when enabled) -->
+                        <StackPanel Visibility="{Binding HealthCheckEnabled, Converter={StaticResource BoolToVisibility}}"
+                                    Margin="16,0,0,0">
+                            <TextBlock Text="Health check URL" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding HealthCheckUrl, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="http://localhost:3000/health" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Check interval (seconds)" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding HealthInterval, UpdateSourceTrigger=PropertyChanged}" Tag="30"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Failures before restart" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding HealthFailures, UpdateSourceTrigger=PropertyChanged}" Tag="3"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ══════════════ HOOKS ══════════════ -->
+            <TabItem Header="Hooks">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+                    <StackPanel>
+                        <Border CornerRadius="6" Background="#161b22" Padding="10,7" Margin="0,0,0,16"
+                                BorderBrush="#30363d" BorderThickness="1">
+                            <TextBlock Foreground="#7d8590" FontSize="11" TextWrapping="Wrap"
+                                       Text="Hooks run as shell commands (cmd.exe /c). Pre-start runs before the process launches and blocks until complete. Post-stop runs after the process exits."/>
+                        </Border>
+
+                        <TextBlock Text="FREE PORT (before start)" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding FreePort, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag='e.g. 3012 — kills whatever holds this port. Empty = disabled'
+                                 Width="160" HorizontalAlignment="Left" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="PRE-START COMMAND" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding PreStartCommand, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag='e.g. echo "Starting..." or setup.bat'
+                                 Margin="0,0,0,16"/>
+
+                        <TextBlock Text="POST-STOP COMMAND" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding PostStopCommand, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag='e.g. cleanup.bat or del temp\*.tmp'/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Deployment">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+                    <StackPanel>
+                        <Border CornerRadius="6" Background="#161b22" Padding="10,7" Margin="0,0,0,16"
+                                BorderBrush="#30363d" BorderThickness="1">
+                            <TextBlock Foreground="#7d8590" FontSize="11" TextWrapping="Wrap"
+                                       Text="Git deploy updates the selected repo with a fast-forward only workflow, optionally runs a post-pull command, then restarts the service and validates startup."/>
+                        </Border>
+
+                        <CheckBox Content="Enable Git deploy for this script"
+                                  IsChecked="{Binding GitDeployEnabled}" Margin="0,0,0,12"/>
+
+                        <StackPanel Visibility="{Binding GitDeployEnabled, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Repository Directory" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding GitRepoDir, UpdateSourceTrigger=PropertyChanged}"
+                                         Tag="Folder containing the git repository" Margin="0,0,8,0"/>
+                                <Button Grid.Column="1" Content="Browse" Style="{StaticResource DarkButton}"
+                                        Click="BrowseGitRepoDir_Click" Padding="12,6"/>
+                            </Grid>
+
+                            <TextBlock Text="Branch" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding GitBranch, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="Branch name to deploy, e.g. main or release/web" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Post-pull Command" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding GitPostPullCommand, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag='Optional, e.g. py -m pip install -r requirements.txt' Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Startup Validation Timeout (seconds)" FontSize="11" FontWeight="Medium" Foreground="#7d8590" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding GitHealthTimeout, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="60" Margin="0,0,0,12"/>
+
+                            <CheckBox Content="Rollback automatically if deploy fails"
+                                      IsChecked="{Binding GitRollbackOnFailure}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Error message -->
+        <TextBlock Grid.Row="3" Margin="0,6,0,0"
+                   Text="{Binding ErrorMessage}" Foreground="#d29922"
+                   TextWrapping="Wrap" FontSize="11"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Save" Style="{StaticResource AccentButton}" Width="100" Margin="0,0,8,0"
+                    Click="Ok_Click" Padding="12,7"/>
+            <Button Content="Cancel" Style="{StaticResource DarkButton}" Width="100"
+                    IsCancel="True" Padding="12,7"/>
+        </StackPanel>
+    </Grid>
+</Window>
