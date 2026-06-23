@@ -102,8 +102,7 @@ src/
 Contiene modelos y servicios de negocio:
 
 - `LocalBackupService`: scheduler local de backups, ejecucion de `mysqldump`, compresion gzip, historial y retencion.
-- `ProcessMonitorService`: deteccion de procesos locales.
-- `ResourceMonitorService`: lectura de recursos del sistema y procesos.
+- `ResourceMonitorService`: lectura de CPU, RAM, temperatura y procesos locales.
 - `GitDeployService`: deploy con Git y rollback.
 - Modelos de scripts, backups y estado de base de datos.
 
