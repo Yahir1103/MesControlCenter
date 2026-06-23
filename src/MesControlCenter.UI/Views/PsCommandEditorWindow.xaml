@@ -180,6 +180,11 @@
                                        Text="Hooks run as shell commands (cmd.exe /c). Pre-start runs before the PowerShell script launches and blocks until complete. Post-stop runs after the process exits."/>
                         </Border>
 
+                        <TextBlock Text="FREE PORT (before start)" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding FreePort, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag='e.g. 3012 - kills whatever holds this port. Empty = disabled'
+                                 Width="160" HorizontalAlignment="Left" Margin="0,0,0,16"/>
+
                         <TextBlock Text="PRE-START COMMAND" FontSize="10" FontWeight="Bold" Foreground="#484f58" Margin="0,0,0,6"/>
                         <TextBox Text="{Binding PreStartCommand, UpdateSourceTrigger=PropertyChanged}"
                                  Tag='e.g. echo "Starting n8n..." or setup.bat'

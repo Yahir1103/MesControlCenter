@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MesControlCenter.Core.Models;
@@ -13,6 +15,8 @@ public partial class BackupViewModel : ObservableObject
 {
     private static readonly Regex TimeRegex = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
     private readonly LocalBackupService _backupService;
+    private readonly DispatcherTimer _runningTimer;
+    private DateTime? _runningStartedAt;
     private bool _subscribed;
 
     public ObservableCollection<BackupRunViewModel> Runs { get; } = new();
@@ -39,10 +43,14 @@ public partial class BackupViewModel : ObservableObject
     [ObservableProperty] private string _lastSizeText = "-";
     [ObservableProperty] private string _lastFilePath = string.Empty;
     [ObservableProperty] private string _lastError = string.Empty;
+    [ObservableProperty] private bool _isBackupRunning;
+    [ObservableProperty] private string _runningBackupText = string.Empty;
 
     public BackupViewModel(LocalBackupService backupService)
     {
         _backupService = backupService;
+        _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _runningTimer.Tick += (_, _) => UpdateRunningBackupText();
     }
 
     public async Task StartAsync()
@@ -72,6 +80,7 @@ public partial class BackupViewModel : ObservableObject
             _subscribed = false;
         }
 
+        _runningTimer.Stop();
         return Task.CompletedTask;
     }
 
@@ -96,6 +105,48 @@ public partial class BackupViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void BrowseMysqldumpPath()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select mysqldump.exe",
+            Filter = "mysqldump.exe|mysqldump.exe|Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        var initialDirectory = GetExistingDirectory(MysqldumpPath);
+        if (!string.IsNullOrWhiteSpace(initialDirectory))
+            dlg.InitialDirectory = initialDirectory;
+
+        if (dlg.ShowDialog() == true)
+        {
+            MysqldumpPath = dlg.FileName;
+            StatusMessage = "mysqldump selected.";
+        }
+    }
+
+    [RelayCommand]
+    private void BrowseBackupDir()
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select backup folder",
+            Multiselect = false
+        };
+
+        var initialDirectory = GetExistingDirectory(BackupDir);
+        if (!string.IsNullOrWhiteSpace(initialDirectory))
+            dlg.InitialDirectory = initialDirectory;
+
+        if (dlg.ShowDialog() == true)
+        {
+            BackupDir = dlg.FolderName;
+            StatusMessage = "Backup folder selected.";
         }
     }
 
@@ -191,9 +242,20 @@ public partial class BackupViewModel : ObservableObject
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(BackupDir))
+        var backupDir = CleanPathInput(BackupDir);
+        if (string.IsNullOrWhiteSpace(backupDir))
         {
             StatusMessage = "Backup folder is required.";
+            return false;
+        }
+
+        try
+        {
+            _ = Path.GetFullPath(backupDir);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Backup folder path is not valid: {ex.Message}";
             return false;
         }
 
@@ -221,19 +283,20 @@ public partial class BackupViewModel : ObservableObject
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(MysqldumpPath))
+        var mysqldumpPath = CleanPathInput(MysqldumpPath);
+        if (string.IsNullOrWhiteSpace(mysqldumpPath))
         {
             StatusMessage = "mysqldump path is required.";
             return false;
         }
 
         BackupTime = time;
-        BackupDir = BackupDir.Trim();
+        BackupDir = backupDir;
         DbHost = DbHost.Trim();
         DbPortText = dbPort.ToString();
         DbUser = DbUser.Trim();
         DbDatabase = DbDatabase.Trim();
-        MysqldumpPath = MysqldumpPath.Trim();
+        MysqldumpPath = mysqldumpPath;
         return true;
     }
 
@@ -280,6 +343,7 @@ public partial class BackupViewModel : ObservableObject
     private void ApplyStatus(BackupStatus status)
     {
         ApplyConfig(status.Config);
+        ApplyRunningState(status);
 
         var last = status.LastRun;
         BackupStateText = status.IsRunning
@@ -310,6 +374,25 @@ public partial class BackupViewModel : ObservableObject
         LastSizeText = FormatSize(last?.FileSizeBytes);
         LastFilePath = last?.FilePath ?? string.Empty;
         LastError = last?.ErrorMessage ?? string.Empty;
+    }
+
+    private void ApplyRunningState(BackupStatus status)
+    {
+        IsBackupRunning = status.IsRunning;
+        _runningStartedAt = status.RunningRun?.StartedAt;
+
+        if (status.IsRunning)
+        {
+            UpdateRunningBackupText();
+            if (!_runningTimer.IsEnabled)
+                _runningTimer.Start();
+        }
+        else
+        {
+            _runningTimer.Stop();
+            RunningBackupText = string.Empty;
+            _runningStartedAt = null;
+        }
     }
 
     private void ApplyConfig(BackupConfig config)
@@ -351,8 +434,66 @@ public partial class BackupViewModel : ObservableObject
         return $"{value:0.##} {units[unit]}";
     }
 
+    private void UpdateRunningBackupText()
+    {
+        if (!IsBackupRunning)
+        {
+            RunningBackupText = string.Empty;
+            return;
+        }
+
+        if (_runningStartedAt == null)
+        {
+            RunningBackupText = "Backup running...";
+            return;
+        }
+
+        var elapsed = DateTime.Now - _runningStartedAt.Value;
+        RunningBackupText = $"Elapsed {FormatElapsed(elapsed)} · Started {_runningStartedAt:yyyy-MM-dd HH:mm:ss}";
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        if (elapsed.TotalHours >= 1)
+            return $"{(int)elapsed.TotalHours:0}h {elapsed.Minutes:00}m {elapsed.Seconds:00}s";
+        if (elapsed.TotalMinutes >= 1)
+            return $"{elapsed.Minutes:0}m {elapsed.Seconds:00}s";
+        return $"{Math.Max(0, elapsed.Seconds):0}s";
+    }
+
     private static SolidColorBrush Brush(string color)
         => new((Color)ColorConverter.ConvertFromString(color));
+
+    private static string CleanPathInput(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return Environment.ExpandEnvironmentVariables(value.Trim().Trim('"', '\''));
+    }
+
+    private static string? GetExistingDirectory(string? value)
+    {
+        var path = CleanPathInput(value);
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            if (Directory.Exists(path))
+                return Path.GetFullPath(path);
+
+            var parent = Path.GetDirectoryName(path);
+            while (!string.IsNullOrWhiteSpace(parent) && !Directory.Exists(parent))
+                parent = Path.GetDirectoryName(parent);
+
+            return string.IsNullOrWhiteSpace(parent) ? null : parent;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static void OnUi(Action action)
     {

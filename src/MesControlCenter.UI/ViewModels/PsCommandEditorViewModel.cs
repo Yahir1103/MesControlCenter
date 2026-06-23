@@ -23,6 +23,7 @@ public partial class PsCommandEditorViewModel : ObservableObject
     [ObservableProperty] private string _healthFailures = "3";
 
     // ── Hooks ─────────────────────────────────────────────────────
+    [ObservableProperty] private string _freePort        = string.Empty;
     [ObservableProperty] private string _preStartCommand = string.Empty;
     [ObservableProperty] private string _postStopCommand = string.Empty;
 
@@ -54,6 +55,7 @@ public partial class PsCommandEditorViewModel : ObservableObject
         HealthInterval     = entry.HealthCheckIntervalSeconds.ToString();
         HealthFailures     = entry.HealthCheckFailuresBeforeRestart.ToString();
 
+        FreePort        = entry.FreePort > 0 ? entry.FreePort.ToString() : string.Empty;
         PreStartCommand = entry.PreStartCommand;
         PostStopCommand = entry.PostStopCommand;
     }
@@ -91,6 +93,7 @@ public partial class PsCommandEditorViewModel : ObservableObject
             HealthCheckIntervalSeconds       = ParseInt(HealthInterval, 30),
             HealthCheckFailuresBeforeRestart = ParseInt(HealthFailures, 3),
 
+            FreePort        = ParseInt(FreePort, 0),
             PreStartCommand = PreStartCommand.Trim(),
             PostStopCommand = PostStopCommand.Trim(),
         };

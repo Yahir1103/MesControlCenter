@@ -100,9 +100,18 @@
 
                                 <TextBlock Text="mysqldump path" FontSize="11" FontWeight="Medium"
                                            Foreground="#7d8590" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding MysqldumpPath, UpdateSourceTrigger=PropertyChanged}"
-                                         Tag="mysqldump" FontFamily="Cascadia Code, Consolas"
-                                         Margin="0,0,0,16"/>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding MysqldumpPath, UpdateSourceTrigger=PropertyChanged}"
+                                             Tag="mysqldump" FontFamily="Cascadia Code, Consolas"/>
+                                    <Button Grid.Column="2" Content="Browse" Style="{StaticResource DarkButton}"
+                                            Command="{Binding BrowseMysqldumpPathCommand}" Padding="12,6"/>
+                                </Grid>
 
                                 <TextBlock Text="Schedule" FontSize="15" FontWeight="SemiBold"
                                            Foreground="{StaticResource AccentBlueBrush}" Margin="0,0,0,12"/>
@@ -127,9 +136,18 @@
 
                                 <TextBlock Text="Backup folder" FontSize="11" FontWeight="Medium"
                                            Foreground="#7d8590" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding BackupDir, UpdateSourceTrigger=PropertyChanged}"
-                                         Tag="C:\MES_Backups" FontFamily="Cascadia Code, Consolas"
-                                         Margin="0,0,0,16"/>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding BackupDir, UpdateSourceTrigger=PropertyChanged}"
+                                             Tag="C:\MES_Backups" FontFamily="Cascadia Code, Consolas"/>
+                                    <Button Grid.Column="2" Content="Browse" Style="{StaticResource DarkButton}"
+                                            Command="{Binding BrowseBackupDirCommand}" Padding="12,6"/>
+                                </Grid>
 
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="Save" Style="{StaticResource SuccessButton}"
@@ -147,6 +165,46 @@
                         <StackPanel>
                             <TextBlock Text="Current Status" FontSize="15" FontWeight="SemiBold"
                                        Foreground="{StaticResource AccentBlueBrush}" Margin="0,0,0,12"/>
+
+                            <Border Visibility="{Binding IsBackupRunning, Converter={StaticResource BoolToVisibility}}"
+                                    CornerRadius="8" Padding="12" Background="#0e1117"
+                                    BorderBrush="#30363d" BorderThickness="1" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Backup running"
+                                                   Foreground="#58a6ff" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding RunningBackupText}"
+                                                   Foreground="#8b949e" FontSize="11"
+                                                   HorizontalAlignment="Right"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                    <Grid Height="6" ClipToBounds="True" Margin="0,10,0,0">
+                                        <Border CornerRadius="3" Background="#21262d"/>
+                                        <Border Width="110" CornerRadius="3" HorizontalAlignment="Left"
+                                                Background="#58a6ff">
+                                            <Border.RenderTransform>
+                                                <TranslateTransform X="-110"/>
+                                            </Border.RenderTransform>
+                                            <Border.Triggers>
+                                                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                                             From="-110" To="340"
+                                                                             Duration="0:0:1.35"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Border.Triggers>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
 
                             <TextBlock Text="Next backup" FontSize="11" FontWeight="Medium" Foreground="#7d8590"/>
                             <TextBlock Text="{Binding NextRunText}" Foreground="#e6edf3" FontSize="13"

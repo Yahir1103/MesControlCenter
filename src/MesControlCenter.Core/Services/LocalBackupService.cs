@@ -231,10 +231,11 @@ public sealed class LocalBackupService : IDisposable
         var safeDb = SanitizeFilePart(config.DbDatabase);
         var filePath = Path.Combine(backupDir, $"{safeDb}_{stamp}.sql.gz");
         var tempPath = $"{filePath}.tmp";
+        var mysqldumpPath = ResolveMysqldumpExecutable(config.MysqldumpPath);
 
         var psi = new ProcessStartInfo
         {
-            FileName = string.IsNullOrWhiteSpace(config.MysqldumpPath) ? "mysqldump" : config.MysqldumpPath,
+            FileName = mysqldumpPath,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -372,6 +373,11 @@ public sealed class LocalBackupService : IDisposable
             Config = CloneConfig(_state.Config),
             IsRunning = _state.Runs.Any(r => string.Equals(r.Status, "running", StringComparison.OrdinalIgnoreCase)),
             NextRunAt = _nextRunAt,
+            RunningRun = _state.Runs
+                .Where(r => string.Equals(r.Status, "running", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(r => r.Id)
+                .Select(CloneRun)
+                .FirstOrDefault(),
             LastRun = _state.Runs
                 .Where(r => !string.Equals(r.Status, "running", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(r => r.Id)
@@ -483,14 +489,14 @@ public sealed class LocalBackupService : IDisposable
             Enabled = config.Enabled,
             BackupTime = string.IsNullOrWhiteSpace(config.BackupTime) ? "22:00" : config.BackupTime.Trim(),
             RetentionDays = Math.Max(1, config.RetentionDays),
-            BackupDir = string.IsNullOrWhiteSpace(config.BackupDir) ? Path.Combine(ConfigDir, "backups") : config.BackupDir.Trim(),
+            BackupDir = string.IsNullOrWhiteSpace(config.BackupDir) ? Path.Combine(ConfigDir, "backups") : CleanPathInput(config.BackupDir),
             Timezone = string.IsNullOrWhiteSpace(config.Timezone) ? TimeZoneInfo.Local.Id : config.Timezone.Trim(),
             DbHost = string.IsNullOrWhiteSpace(config.DbHost) ? "localhost" : config.DbHost.Trim(),
             DbPort = config.DbPort <= 0 ? 3306 : config.DbPort,
             DbUser = config.DbUser.Trim(),
             DbPassword = config.DbPassword,
             DbDatabase = config.DbDatabase.Trim(),
-            MysqldumpPath = string.IsNullOrWhiteSpace(config.MysqldumpPath) ? "mysqldump" : config.MysqldumpPath.Trim()
+            MysqldumpPath = string.IsNullOrWhiteSpace(config.MysqldumpPath) ? "mysqldump" : CleanPathInput(config.MysqldumpPath)
         };
     }
 
@@ -502,6 +508,15 @@ public sealed class LocalBackupService : IDisposable
             throw new InvalidOperationException("Retention days must be a positive number.");
         if (string.IsNullOrWhiteSpace(config.BackupDir))
             throw new InvalidOperationException("Backup folder is required.");
+        try
+        {
+            _ = ResolveBackupDir(config.BackupDir);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Backup folder path is not valid: {ex.Message}");
+        }
+
         if (string.IsNullOrWhiteSpace(config.DbHost))
             throw new InvalidOperationException("Database host is required.");
         if (config.DbPort <= 0 || config.DbPort > 65535)
@@ -560,6 +575,152 @@ public sealed class LocalBackupService : IDisposable
         return Path.IsPathRooted(backupDir)
             ? Path.GetFullPath(backupDir)
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, backupDir));
+    }
+
+    private static string ResolveMysqldumpExecutable(string configuredPath)
+    {
+        var path = CleanPathInput(configuredPath);
+        if (string.IsNullOrWhiteSpace(path))
+            path = "mysqldump";
+
+        if (IsPathLike(path))
+        {
+            var fullPath = Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(AppContext.BaseDirectory, path);
+
+            if (File.Exists(fullPath))
+                return Path.GetFullPath(fullPath);
+
+            if (!Path.HasExtension(fullPath) && File.Exists($"{fullPath}.exe"))
+                return Path.GetFullPath($"{fullPath}.exe");
+
+            throw new FileNotFoundException(
+                "mysqldump.exe was not found at the configured path. Select it from Backups > mysqldump path > Browse.",
+                fullPath);
+        }
+
+        var pathMatch = FindOnPath(path);
+        if (pathMatch != null)
+            return pathMatch;
+
+        var commonMatch = FindCommonMysqldumpPath();
+        if (commonMatch != null)
+            return commonMatch;
+
+        throw new FileNotFoundException(
+            "mysqldump.exe was not found. Select the full path from Backups > mysqldump path > Browse.");
+    }
+
+    private static bool IsPathLike(string value)
+        => value.Contains(Path.DirectorySeparatorChar)
+           || value.Contains(Path.AltDirectorySeparatorChar)
+           || Path.IsPathRooted(value);
+
+    private static string? FindOnPath(string executableName)
+    {
+        var pathValue = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathValue))
+            return null;
+
+        var candidates = Path.HasExtension(executableName)
+            ? [executableName]
+            : new[] { $"{executableName}.exe", executableName };
+
+        foreach (var dir in pathValue.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(dir))
+                continue;
+
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    var fullPath = Path.Combine(dir.Trim(), candidate);
+                    if (File.Exists(fullPath))
+                        return Path.GetFullPath(fullPath);
+                }
+                catch
+                {
+                    // Ignore malformed PATH entries.
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindCommonMysqldumpPath()
+    {
+        var directCandidates = new[]
+        {
+            @"C:\xampp\mysql\bin\mysqldump.exe",
+            @"C:\laragon\bin\mysql\mysql-8.0\bin\mysqldump.exe"
+        };
+
+        foreach (var candidate in directCandidates)
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        foreach (var root in GetProgramFilesRoots())
+        {
+            foreach (var match in FindVersionedBinExecutable(root, "MySQL", "MySQL Server *", "mysqldump.exe"))
+                return match;
+            foreach (var match in FindVersionedBinExecutable(root, string.Empty, "MariaDB *", "mysqldump.exe"))
+                return match;
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> GetProgramFilesRoots()
+    {
+        var roots = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+        };
+
+        return roots.Where(root => !string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> FindVersionedBinExecutable(
+        string root,
+        string vendorFolder,
+        string versionFolderPattern,
+        string executableName)
+    {
+        var baseDir = string.IsNullOrWhiteSpace(vendorFolder) ? root : Path.Combine(root, vendorFolder);
+        if (!Directory.Exists(baseDir))
+            yield break;
+
+        IEnumerable<string> versionDirs;
+        try
+        {
+            versionDirs = Directory.EnumerateDirectories(baseDir, versionFolderPattern);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var versionDir in versionDirs.OrderByDescending(Path.GetFileName))
+        {
+            var candidate = Path.Combine(versionDir, "bin", executableName);
+            if (File.Exists(candidate))
+                yield return candidate;
+        }
+    }
+
+    private static string CleanPathInput(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return Environment.ExpandEnvironmentVariables(value.Trim().Trim('"', '\''));
     }
 
     private static string SanitizeFilePart(string value)
