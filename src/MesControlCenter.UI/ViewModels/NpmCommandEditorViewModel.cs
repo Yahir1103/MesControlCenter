@@ -33,6 +33,9 @@ public partial class NpmCommandEditorViewModel : ObservableObject
 
     [ObservableProperty] private string _errorMessage = string.Empty;
 
+    // Generated once so repeated ToScriptEntry() calls are idempotent (same Id).
+    private readonly string _id = Guid.NewGuid().ToString();
+
     public ObservableCollection<string> AvailableScripts { get; } = new();
     public ObservableCollection<string> AvailableFolders { get; } = new();
 
@@ -145,7 +148,7 @@ public partial class NpmCommandEditorViewModel : ObservableObject
         ErrorMessage = string.Empty;
         return new ScriptEntry
         {
-            Id        = existingId ?? Guid.NewGuid().ToString(),
+            Id        = existingId ?? _id,
             Kind      = "npm",
             Name      = CommandName.Trim(),
             Folder    = Folder.Trim(),

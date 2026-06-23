@@ -41,6 +41,9 @@ public partial class ScriptEditorViewModel : ObservableObject
     [ObservableProperty] private string _gitHealthTimeout = "60";
     [ObservableProperty] private bool   _gitRollbackOnFailure = true;
 
+    // Generated once so repeated ToScriptEntry() calls are idempotent (same Id).
+    private readonly string _id = Guid.NewGuid().ToString();
+
     public ObservableCollection<string> AvailableFolders { get; } = new();
 
     public void SetAvailableFolders(IEnumerable<string> folders)
@@ -155,7 +158,7 @@ public partial class ScriptEditorViewModel : ObservableObject
 
         return new ScriptEntry
         {
-            Id         = existingId ?? Guid.NewGuid().ToString(),
+            Id         = existingId ?? _id,
             Name       = ScriptName.Trim(),
             Folder     = Folder.Trim(),
             Path       = ScriptPath.Trim(),

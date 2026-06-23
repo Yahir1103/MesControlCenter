@@ -29,6 +29,9 @@ public partial class PsCommandEditorViewModel : ObservableObject
 
     [ObservableProperty] private string _errorMessage = string.Empty;
 
+    // Generated once so repeated ToScriptEntry() calls are idempotent (same Id).
+    private readonly string _id = Guid.NewGuid().ToString();
+
     public ObservableCollection<string> AvailableFolders { get; } = new();
 
     public void SetAvailableFolders(IEnumerable<string> folders)
@@ -76,7 +79,7 @@ public partial class PsCommandEditorViewModel : ObservableObject
         ErrorMessage = string.Empty;
         return new ScriptEntry
         {
-            Id         = existingId ?? Guid.NewGuid().ToString(),
+            Id         = existingId ?? _id,
             Kind       = "ps_command",
             Name       = CommandName.Trim(),
             Folder     = Folder.Trim(),
