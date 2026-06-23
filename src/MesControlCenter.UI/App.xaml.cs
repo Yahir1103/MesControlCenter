@@ -24,7 +24,6 @@ public partial class App : Application
         var services = new ServiceCollection();
 
         // Core services
-        services.AddSingleton<IScriptMonitor, ProcessMonitorService>();
         services.AddSingleton<GitDeployService>();
         services.AddSingleton<ResourceMonitorService>();
         services.AddSingleton<LocalBackupService>();
