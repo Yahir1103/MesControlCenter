@@ -12,9 +12,9 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MesControlCenter.Core.Interfaces;
 using MesControlCenter.Core.Models;
 using MesControlCenter.Core.Services;
+using MesControlCenter.Data;
 using MesControlCenter.UI.Helpers;
 using MesControlCenter.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +23,7 @@ namespace MesControlCenter.UI.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    private readonly IScriptConfigRepository _configRepo;
+    private readonly JsonScriptConfigRepository _configRepo;
     private readonly GitDeployService _gitDeployService;
     private readonly ResourceMonitorService _resourceMonitorService;
     private readonly LocalBackupService _backupService;
@@ -89,7 +89,7 @@ public partial class MainViewModel : ObservableObject
         ".script_control_center", "logs");
 
     public MainViewModel(
-        IScriptConfigRepository configRepo,
+        JsonScriptConfigRepository configRepo,
         GitDeployService gitDeployService,
         ResourceMonitorService resourceMonitorService,
         LocalBackupService backupService)

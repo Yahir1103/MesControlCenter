@@ -1,11 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MesControlCenter.Core.Interfaces;
 using MesControlCenter.Core.Models;
 
 namespace MesControlCenter.Data;
 
-public class JsonScriptConfigRepository : IScriptConfigRepository
+public class JsonScriptConfigRepository
 {
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

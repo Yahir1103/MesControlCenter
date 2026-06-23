@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Threading;
-using MesControlCenter.Core.Interfaces;
 using MesControlCenter.Core.Services;
 using MesControlCenter.Data;
 using MesControlCenter.UI.ViewModels;
@@ -27,7 +26,7 @@ public partial class App : Application
         services.AddSingleton<GitDeployService>();
         services.AddSingleton<ResourceMonitorService>();
         services.AddSingleton<LocalBackupService>();
-        services.AddSingleton<IScriptConfigRepository, JsonScriptConfigRepository>();
+        services.AddSingleton<JsonScriptConfigRepository>();
 
         // ViewModels
         services.AddTransient<MainViewModel>();
